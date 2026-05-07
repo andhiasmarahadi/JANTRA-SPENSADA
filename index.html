@@ -690,7 +690,6 @@
         // ==========================================
         async function gasAPI(action, payload = {}) {
             if (IS_PREVIEW) {
-                // Simulasi delay Cloud jika mode preview
                 await new Promise(r => setTimeout(r, 800));
                 if (action === 'load') return dummyDb;
                 if (action === 'update') return { status: 'success' };
@@ -698,21 +697,18 @@
 
             if (!GAS_URL) throw new Error("URL Cloud API belum disetel.");
 
-            const url = action === 'load' ? GAS_URL + '?action=load' : GAS_URL;
-            const options = action === 'load' ? { method: 'GET' } : {
+            // PENTING: Semua komunikasi sekarang menggunakan POST (text/plain) agar browser tidak memblokir akses GET
+            const response = await fetch(GAS_URL, {
                 method: 'POST',
-                // PENTING: Gunakan text/plain agar tidak memicu Preflight CORS block di GAS
                 headers: { 'Content-Type': 'text/plain;charset=utf-8' }, 
                 body: JSON.stringify({ action: action, ...payload })
-            };
+            });
 
-            const response = await fetch(url, options);
             if (!response.ok) throw new Error("Jaringan gagal merespon");
-            const result = await response.json();
-            return result;
+            return await response.json();
         }
 
-        async function saveToCloud(sheetName, dataArray) {
+     async function saveToCloud(sheetName, dataArray) {
             document.getElementById('global-loader').style.display = 'flex';
             try {
                 const res = await gasAPI('update', { sheet: sheetName, data: dataArray });
