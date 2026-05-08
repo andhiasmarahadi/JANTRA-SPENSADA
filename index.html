@@ -26,7 +26,7 @@
     <script>
         // KONFIGURASI APLIKASI
         // UBAH IS_PREVIEW KE false JIKA AKAN DI-DEPLOY KE BLOGGER
-        const IS_PREVIEW = false; // Set default true untuk Canvas
+        const IS_PREVIEW = true; // Set default true untuk Canvas
         const GAS_URL = "https://script.google.com/macros/s/AKfycbzvvpVZgAGUu5Nef1teyJJ3wTPfhz7etbyslcpPgovg974p03NwRk8m2yMkWf6711wV/exec";
 
         // PROTEKSI ANTI HACKER
@@ -969,6 +969,15 @@
                 return mKls && mThn && mSem && mNam;
             });
 
+            // Mengurutkan tampilan data absensi berdasarkan no absen
+            filtered.sort((a, b) => {
+                let sisA = state.siswa.find(s => s.nisn === a.nisn);
+                let sisB = state.siswa.find(s => s.nisn === b.nisn);
+                let noA = sisA ? parseInt(sisA.no || 0) : 9999;
+                let noB = sisB ? parseInt(sisB.no || 0) : 9999;
+                return noA - noB;
+            });
+
             let optKls = kelasList.filter(k=>k!=='Kegiatan Umum'&&k!=='Istirahat').map(k=>`<option value="${k}" ${fKelas===k?'selected':''}>${k}</option>`).join('');
             let optThn = tahunList.map(t=>`<option value="${t}" ${fTahun===t?'selected':''}>${t}</option>`).join('');
             
@@ -1161,12 +1170,14 @@
             const tgl = document.getElementById('iaTgl').value;
             const t = document.getElementById('iaThn').value; const k = document.getElementById('iaKls').value; const s = document.getElementById('iaSem').value;
             if(!tgl || !t || !k || !s) return Swal.fire('Oops','Silakan lengkapi Tanggal, Tahun, Kelas, dan Semester!','warning');
+            
+            // Pengurutan siswa berdasarkan no absen untuk input absensi
             let sisList = state.siswa.filter(x => x.tahun === t && x.kelas === k).sort((a, b) => parseInt(a.no || 0) - parseInt(b.no || 0));
+            
             if(sisList.length === 0) return document.getElementById('areaFormAbsensi').innerHTML = '<p class="text-center text-red-500 p-8 border rounded-lg bg-red-50">Data siswa tidak ditemukan untuk Kelas & Tahun tersebut.</p>';
             
             let html = `<form onsubmit="simpanBatchAbsen(event, '${t}', '${k}', '${s}')"><div class="overflow-x-auto pb-4"><table class="w-full text-left border-collapse min-w-[600px] mb-4"><thead class="bg-gray-100"><tr><th class="p-3 border w-10 text-center">No</th><th class="p-3 border">Nama Siswa</th><th class="p-3 border text-center whitespace-nowrap">Kehadiran (Hadir / Sakit / Ijin / Alpha)</th></tr></thead><tbody>`;
             sisList.forEach((sis, idx) => {
-                // Merubah name="abs_${sis.id}" menjadi name="abs_${sis.nisn}" agar radio button unik dan tidak bertabrakan antar siswa
                 html += `<tr><td class="p-2 border text-center">${sis.no || idx+1}</td><td class="p-2 border font-medium">${sis.nama}</td><td class="p-2 border text-center">
                     <label class="mx-2 cursor-pointer font-bold text-green-600"><input type="radio" name="abs_${sis.nisn}" value="Hadir" checked class="mr-1" onchange="hitungRekap()">H</label>
                     <label class="mx-2 cursor-pointer font-bold text-yellow-600"><input type="radio" name="abs_${sis.nisn}" value="Sakit" class="mr-1" onchange="hitungRekap()">S</label>
@@ -1208,6 +1219,16 @@
         function renderNilai() {
             const fKelas = document.getElementById('fnKls')?.value || ''; const fTahun = document.getElementById('fnThn')?.value || ''; const fSem = document.getElementById('fnSem')?.value || ''; const fNama = (document.getElementById('fnNama')?.value || '').toLowerCase();
             let filtered = state.nilai.filter(n => { let mKls = fKelas ? n.kelas === fKelas : true; let mThn = fTahun ? n.tahun === fTahun : true; let mSem = fSem ? n.semester === fSem : true; let mNam = (n.nama || '').toLowerCase().includes(fNama); return mKls && mThn && mSem && mNam; });
+            
+            // Mengurutkan tampilan data nilai berdasarkan no absen
+            filtered.sort((a, b) => {
+                let sisA = state.siswa.find(s => s.nisn === a.nisn);
+                let sisB = state.siswa.find(s => s.nisn === b.nisn);
+                let noA = sisA ? parseInt(sisA.no || 0) : 9999;
+                let noB = sisB ? parseInt(sisB.no || 0) : 9999;
+                return noA - noB;
+            });
+
             let optKls = kelasList.filter(k=>k!=='Kegiatan Umum'&&k!=='Istirahat').map(k=>`<option value="${k}" ${fKelas===k?'selected':''}>${k}</option>`).join(''); let optThn = tahunList.map(t=>`<option value="${t}" ${fTahun===t?'selected':''}>${t}</option>`).join('');
             
             let tbody = filtered.map((n, i) => `<tr class="border-b hover:bg-gray-50"><td class="p-3 text-center text-sm">${i+1}</td><td class="p-3 text-sm font-medium">${n.nama}</td><td class="p-3 text-sm text-center">${n.kelas}</td><td class="p-3 text-sm text-center">${n.semester}</td><td class="p-3 text-sm text-center font-bold text-blue-700">${n.mapel}</td><td class="p-3 text-sm text-center"><span class="bg-purple-100 text-purple-800 px-2 py-1 rounded text-xs font-bold">${n.kategori || 'TP'}</span></td><td class="p-3 text-sm text-center text-lg font-bold ${n.nilai<75?'text-red-600':'text-green-600'}">${n.nilai}</td></tr>`).join('');
@@ -1399,13 +1420,15 @@
         function generateFormNilai() {
             const t = document.getElementById('inThn').value; const k = document.getElementById('inKls').value; const s = document.getElementById('inSem').value; const kat = document.getElementById('inKat').value;
             if(!t || !k || !s) return Swal.fire('Oops','Silakan pilih Tahun, Kelas, dan Semester!','warning');
+            
+            // Pengurutan siswa berdasarkan no absen untuk input nilai
             let sisList = state.siswa.filter(x => x.tahun === t && x.kelas === k).sort((a, b) => parseInt(a.no || 0) - parseInt(b.no || 0));
+            
             if(sisList.length === 0) return document.getElementById('areaFormNilai').innerHTML = '<p class="text-center text-red-500 p-8 border rounded-lg bg-red-50">Data siswa tidak ditemukan untuk Kelas & Tahun tersebut.</p>';
             
             let html = `<form onsubmit="simpanBatchNilai(event, '${t}', '${k}', '${s}')">
                 <div class="bg-blue-50 border border-blue-200 text-blue-800 p-3 rounded-lg mb-4 text-sm font-bold"><i class="fas fa-info-circle mr-2"></i> Menginput nilai untuk kategori: ${kat}</div>
                 <div class="overflow-x-auto pb-4"><table class="w-full text-left border-collapse min-w-[500px] mb-4"><thead class="bg-gray-100"><tr><th class="p-3 border w-10 text-center">No</th><th class="p-3 border">Nama Siswa</th><th class="p-3 border text-center w-32">Nilai (0-100)</th></tr></thead><tbody>`;
-            // Merubah id="nil_${sis.id}" menjadi id="nil_${sis.nisn}" agar aman dan tidak memicu error ketika fungsi simpan dieksekusi
             sisList.forEach((sis, idx) => { html += `<tr><td class="p-2 border text-center">${sis.no || idx+1}</td><td class="p-2 border font-medium">${sis.nama}</td><td class="p-2 border"><input type="number" id="nil_${sis.nisn}" min="0" max="100" class="w-full border rounded p-2 text-center outline-none focus:border-blue-500" required><input type="hidden" name="sisIdNilai" value="${sis.nisn}"></td></tr>`; });
             html += `</tbody></table></div><button type="submit" class="bg-blue-600 text-white font-bold px-6 py-3 rounded-xl shadow-lg hover:bg-blue-700 w-full text-lg"><i class="fas fa-save mr-2"></i>Simpan Daftar Nilai</button></form>`;
             document.getElementById('areaFormNilai').innerHTML = html;
