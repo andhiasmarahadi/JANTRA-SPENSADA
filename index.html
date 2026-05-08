@@ -64,6 +64,17 @@
                 const response = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({ action, payload }) });
                 const res = await response.json();
                 if(!res.success) throw new Error(res.message);
+                
+                // NORMALIZE ID: Memastikan id dari backend terekam ke variabel 'id' agar fungsi Edit/Hapus bekerja
+                if(res.data && Array.isArray(res.data)) {
+                    res.data = res.data.map(item => {
+                        if(!item.id) item.id = item.id_user || item.id_siswa || item.id_jurnal || item.id_absen || item.id_nilai;
+                        return item;
+                    });
+                } else if (res.data && typeof res.data === 'object' && !res.data.id) {
+                    res.data.id = res.data.id_user || res.data.id_siswa || res.data.id_jurnal || res.data.id_absen || res.data.id_nilai;
+                }
+                
                 return res;
             } catch (error) {
                 Swal.fire('Error', error.message || 'Koneksi ke Server Gagal!', 'error');
@@ -899,17 +910,14 @@
             try { 
                 await apiCall('saveJurnal', p); 
                 closeLoading(); 
-                Swal.fire('Berhasil!', p.id ? 'Jurnal berhasil diperbarui.' : 'Tersimpan. Anda bisa input jurnal berikutnya.', 'success'); 
-                
-                document.getElementById('formJurnal').reset(); 
-                document.getElementById('jPreview').classList.add('hidden'); 
-                document.getElementById('jBase64').value=''; 
-                window.handleKelasJurnalChange(''); 
-                
-                if(p.id) {
+                Swal.fire('Berhasil!', p.id ? 'Jurnal berhasil diperbarui.' : 'Tersimpan. Jurnal berhasil diinput.', 'success').then(() => {
+                    document.getElementById('formJurnal').reset(); 
+                    document.getElementById('jPreview').classList.add('hidden'); 
+                    document.getElementById('jBase64').value=''; 
+                    window.handleKelasJurnalChange(''); 
                     window.editJurnalData = null;
-                    navigate('jurnal'); // Kembali ke daftar jurnal jika mode Edit
-                }
+                    navigate('jurnal'); // Otomatis kembali ke daftar jurnal agar data ter-refresh
+                });
             } catch(err){closeLoading();} 
         }
 
@@ -1129,12 +1137,13 @@
             
             let html = `<form onsubmit="simpanBatchAbsen(event, '${t}', '${k}', '${s}')"><div class="overflow-x-auto pb-4"><table class="w-full text-left border-collapse min-w-[600px] mb-4"><thead class="bg-gray-100"><tr><th class="p-3 border w-10 text-center">No</th><th class="p-3 border">Nama Siswa</th><th class="p-3 border text-center whitespace-nowrap">Kehadiran (Hadir / Sakit / Ijin / Alpha)</th></tr></thead><tbody>`;
             sisList.forEach((sis, idx) => {
+                // Merubah name="abs_${sis.id}" menjadi name="abs_${sis.nisn}" agar radio button unik dan tidak bertabrakan antar siswa
                 html += `<tr><td class="p-2 border text-center">${idx+1}</td><td class="p-2 border font-medium">${sis.nama}</td><td class="p-2 border text-center">
-                    <label class="mx-2 cursor-pointer font-bold text-green-600"><input type="radio" name="abs_${sis.id}" value="Hadir" checked class="mr-1" onchange="hitungRekap()">H</label>
-                    <label class="mx-2 cursor-pointer font-bold text-yellow-600"><input type="radio" name="abs_${sis.id}" value="Sakit" class="mr-1" onchange="hitungRekap()">S</label>
-                    <label class="mx-2 cursor-pointer font-bold text-blue-600"><input type="radio" name="abs_${sis.id}" value="Ijin" class="mr-1" onchange="hitungRekap()">I</label>
-                    <label class="mx-2 cursor-pointer font-bold text-red-600"><input type="radio" name="abs_${sis.id}" value="Alpha" class="mr-1" onchange="hitungRekap()">A</label>
-                    <input type="hidden" name="sisIdAbs" value="${sis.id}">
+                    <label class="mx-2 cursor-pointer font-bold text-green-600"><input type="radio" name="abs_${sis.nisn}" value="Hadir" checked class="mr-1" onchange="hitungRekap()">H</label>
+                    <label class="mx-2 cursor-pointer font-bold text-yellow-600"><input type="radio" name="abs_${sis.nisn}" value="Sakit" class="mr-1" onchange="hitungRekap()">S</label>
+                    <label class="mx-2 cursor-pointer font-bold text-blue-600"><input type="radio" name="abs_${sis.nisn}" value="Ijin" class="mr-1" onchange="hitungRekap()">I</label>
+                    <label class="mx-2 cursor-pointer font-bold text-red-600"><input type="radio" name="abs_${sis.nisn}" value="Alpha" class="mr-1" onchange="hitungRekap()">A</label>
+                    <input type="hidden" name="sisIdAbs" value="${sis.nisn}">
                 </td></tr>`;
             });
             html += `</tbody></table></div>
@@ -1157,7 +1166,12 @@
 
         window.simpanBatchAbsen = async function(e, thn, kls, sem) {
             e.preventDefault(); const tgl = document.getElementById('iaTgl').value; let payload = []; let formsis = document.querySelectorAll('input[name="sisIdAbs"]');
-            formsis.forEach(inp => { let sId = inp.value; let sis = state.siswa.find(x => x.id === sId); let stat = document.querySelector(`input[name="abs_${sId}"]:checked`).value; payload.push({ tgl: tgl, tahun: thn, semester: sem, kelas: kls, nisn: sis.nisn, nama: sis.nama, status_kehadiran: stat, nipGuru: state.currentUser.nip }); });
+            formsis.forEach(inp => { 
+                let sNisn = inp.value; 
+                let sis = state.siswa.find(x => x.nisn === sNisn); 
+                let stat = document.querySelector(`input[name="abs_${sNisn}"]:checked`).value; 
+                payload.push({ tgl: tgl, tahun: thn, semester: sem, kelas: kls, nisn: sis.nisn, nama: sis.nama, status_kehadiran: stat, nipGuru: state.currentUser.nip }); 
+            });
             showLoading(); try { await apiCall('saveBatchAbsen', payload); closeLoading(); Swal.fire('Berhasil','Absensi satu kelas tersimpan.','success'); document.getElementById('areaFormAbsensi').innerHTML = ''; navigate('absensi'); } catch(err){closeLoading();}
         }
 
@@ -1335,14 +1349,20 @@
             let html = `<form onsubmit="simpanBatchNilai(event, '${t}', '${k}', '${s}')">
                 <div class="bg-blue-50 border border-blue-200 text-blue-800 p-3 rounded-lg mb-4 text-sm font-bold"><i class="fas fa-info-circle mr-2"></i> Menginput nilai untuk kategori: ${kat}</div>
                 <div class="overflow-x-auto pb-4"><table class="w-full text-left border-collapse min-w-[500px] mb-4"><thead class="bg-gray-100"><tr><th class="p-3 border w-10 text-center">No</th><th class="p-3 border">Nama Siswa</th><th class="p-3 border text-center w-32">Nilai (0-100)</th></tr></thead><tbody>`;
-            sisList.forEach((sis, idx) => { html += `<tr><td class="p-2 border text-center">${idx+1}</td><td class="p-2 border font-medium">${sis.nama}</td><td class="p-2 border"><input type="number" id="nil_${sis.id}" min="0" max="100" class="w-full border rounded p-2 text-center outline-none focus:border-blue-500" required><input type="hidden" name="sisIdNilai" value="${sis.id}"></td></tr>`; });
+            // Merubah id="nil_${sis.id}" menjadi id="nil_${sis.nisn}" agar aman dan tidak memicu error ketika fungsi simpan dieksekusi
+            sisList.forEach((sis, idx) => { html += `<tr><td class="p-2 border text-center">${idx+1}</td><td class="p-2 border font-medium">${sis.nama}</td><td class="p-2 border"><input type="number" id="nil_${sis.nisn}" min="0" max="100" class="w-full border rounded p-2 text-center outline-none focus:border-blue-500" required><input type="hidden" name="sisIdNilai" value="${sis.nisn}"></td></tr>`; });
             html += `</tbody></table></div><button type="submit" class="bg-blue-600 text-white font-bold px-6 py-3 rounded-xl shadow-lg hover:bg-blue-700 w-full text-lg"><i class="fas fa-save mr-2"></i>Simpan Daftar Nilai</button></form>`;
             document.getElementById('areaFormNilai').innerHTML = html;
         }
 
         window.simpanBatchNilai = async function(e, thn, kls, sem) {
             e.preventDefault(); const tgl = new Date().toISOString().split('T')[0]; const kat = document.getElementById('inKat').value; let payload = []; let formsis = document.querySelectorAll('input[name="sisIdNilai"]');
-            formsis.forEach(inp => { let sId = inp.value; let sis = state.siswa.find(x => x.id === sId); let val = document.getElementById(`nil_${sId}`).value; if(val !== '') payload.push({ tgl: tgl, tahun: thn, semester: sem, kelas: kls, nisn: sis.nisn, nama: sis.nama, nilai: val, nipGuru: state.currentUser.nip, mapel: state.currentUser.mapel, kategori: kat }); });
+            formsis.forEach(inp => { 
+                let sNisn = inp.value; 
+                let sis = state.siswa.find(x => x.nisn === sNisn); 
+                let val = document.getElementById(`nil_${sNisn}`).value; 
+                if(val !== '') payload.push({ tgl: tgl, tahun: thn, semester: sem, kelas: kls, nisn: sis.nisn, nama: sis.nama, nilai: val, nipGuru: state.currentUser.nip, mapel: state.currentUser.mapel, kategori: kat }); 
+            });
             if(payload.length === 0) return Swal.fire('Info', 'Tidak ada nilai yang diinput', 'info');
             showLoading(); try { await apiCall('saveBatchNilai', payload); closeLoading(); Swal.fire('Berhasil','Nilai satu kelas tersimpan.','success'); document.getElementById('areaFormNilai').innerHTML = ''; navigate('nilai'); } catch(err){closeLoading();}
         }
